@@ -25,12 +25,11 @@ function displayAlbums(){
       var albums = data.CommonPrefixes.map(function(commonPrefix) {
         var prefix = commonPrefix.Prefix;
         var albumName = decodeURIComponent(prefix.replace("/", ""));
-
+        console.log(albumName);
         return getHtml([
           "<li class=\"list-group-item\">",
-          "<span onclick=\"deleteAlbum('" + albumName + "')\">X</span>",
           "<span onclick=\"displayAlbum('" + albumName + "')\">",
-          albumName,
+            albumName       ,
           "</span>",
           "</li>"
         ]);
@@ -66,6 +65,7 @@ function createAlbum(albumName) {
         return alert("There was an error creating your album: " + err.message);
       }
       alert("Successfully created album.");
+      displayAlbums();
       displayAlbum(albumName);
     });
   });
@@ -78,19 +78,32 @@ function displayAlbum(albumName) {
     if (err) {
       return alert("There was an error viewing your album: " + err.message);
     }
-    // 'this' references the AWS.Response instance that represents the response
     var href = this.request.httpRequest.endpoint.href;
     var bucketUrl = href + albumBucketName + "/";
 
     var photos = data.Contents.map(function(photo) {
       var photoKey = photo.Key;
       var photoUrl = bucketUrl + encodeURIComponent(photoKey);
+
+      //onerror=\"this.onerror=null; this.remove();\"
+
+      if(!isValidImage(photoUrl)){
+        return null;
+      }
+
       return getHtml([
         "<div class=\"col-lg-3 col-md-4 col-6\">",
           "<a href=\"#\" class=\"d-block mb-4 h-100\">",
-            '<img class="img-fluid img-thumbnail" style="width:250px;height:250px;" src="' + photoUrl + '"/>',
+            '<img class="img-fluid img-thumbnail"  style="width:250px;height:250px;" src="' + photoUrl + '"/>',
+            "<span class=\"input-group-text btn btn-danger btn-sm\" style=\"font-weight:bold;font-color:white;margin-top:2%;\" onclick=\"deletePhoto('" +
+          albumName +
+          "','" +
+          photoKey +
+          "')\">Delete</span>",
           "</a>",
+
           "</div>"
+
       ]);
 
     });
@@ -98,101 +111,17 @@ function displayAlbum(albumName) {
           var htmlTemplate = [
             getHtml(photos)
           ];
-    document.getElementById("image1").innerHTML = getHtml(htmlTemplate);
+
+  document.getElementById("photoGrid").innerHTML = getHtml(htmlTemplate);
+
   });
 }
 
-function viewAlbum(albumName) {
-  document.getElementById("albumName").innerHTML = albumName;
-  var albumPhotosKey = encodeURIComponent(albumName) + "/";
-  s3.listObjects({ Prefix: albumPhotosKey }, function(err, data) {
-    if (err) {
-      return alert("There was an error viewing your album: " + err.message);
-    }
-    // 'this' references the AWS.Response instance that represents the response
-    var href = this.request.httpRequest.endpoint.href;
-    var bucketUrl = href + albumBucketName + "/";
-
-    var photos = data.Contents.map(function(photo) {
-      var photoKey = photo.Key;
-      var photoUrl = bucketUrl + encodeURIComponent(photoKey);
-      return getHtml([
-        "<span>",
-        "<div>",
-        '<img style="width:128px;height:128px;" src="' + photoUrl + '"/>',
-        "</div>",
-        "<div>",
-        "<span onclick=\"deletePhoto('" +
-          albumName +
-          "','" +
-          photoKey +
-          "')\">",
-        "X",
-        "</span>",
-        "<span>",
-        photoKey.replace(albumPhotosKey, ""),
-        "</span>",
-        "</div>",
-        "</span>"
-      ]);
-    });
-    var message = photos.length
-      ? "<p>Click on the X to delete the photo</p>"
-      : "<p>You do not have any photos in this album. Please add photos.</p>";
-    var htmlTemplate = [
-      "<h2>",
-      "Album: " + albumName,
-      "</h2>",
-      message,
-      "<div>",
-      getHtml(photos),
-      "</div>",
-      '<input id="photoupload" type="file" accept="image/*">',
-      '<button id="addphoto" onclick="s3upload(\'' + albumName + "')\">",
-      "Add Photo",
-      "</button>",
-      '<button onclick="listAlbums()">',
-      "Back To Albums",
-      "</button>"
-    ];
-    document.getElementById("albumsPanel").innerHTML = getHtml(htmlTemplate);
-  });
+function isValidImage(url) {
+    return(url.match(/^http[^\?]*.(jpg|jpeg|gif|png|tiff|bmp)(\?(.*))?$/gmi) != null);
 }
 
-function addPhoto(albumName) {
-  var files = document.getElementById("photoupload").files;
-  if (!files.length) {
-    return alert("Please choose a file to upload first.");
-  }
-  var file = files[0];
-  var fileName = file.name;
-  var albumPhotosKey = encodeURIComponent(albumName) + "/";
-
-  var photoKey = albumPhotosKey + fileName;
-alert(photoKey );
-  // Use S3 ManagedUpload class as it supports multipart uploads
-  var upload = new AWS.S3.ManagedUpload({
-    params: {
-      Bucket: albumBucketName,
-      Key: photoKey ,
-      Body: file
-    }
-  });
-
-  var promise = upload.promise();
-
-  promise.then(
-    function(data) {
-      alert("Successfully uploaded photo.");
-      viewAlbum(albumName);
-    },
-    function(err) {
-      return alert("There was an error uploading your photo: ", err.message);
-    }
-  );
-}
-
-      function s3upload() {
+      function addPhoto() {
               var albumName = document.getElementById('albumName').innerText
               if (!albumName.length) {
                 return alert("Please choose album first.");
@@ -234,11 +163,12 @@ function deletePhoto(albumName, photoKey) {
       return alert("There was an error deleting your photo: ", err.message);
     }
     alert("Successfully deleted photo.");
-    viewAlbum(albumName);
+    displayAlbum(albumName);
   });
 }
 
-function deleteAlbum(albumName) {
+function deleteAlbum() {
+var albumName = document.getElementById('albumName').innerText
   var albumKey = encodeURIComponent(albumName) + "/";
   s3.listObjects({ Prefix: albumKey }, function(err, data) {
     if (err) {
@@ -256,7 +186,10 @@ function deleteAlbum(albumName) {
           return alert("There was an error deleting your album: ", err.message);
         }
         alert("Successfully deleted album.");
-        listAlbums();
+        document.getElementById('albumName').innerText = "";
+        document.getElementById('photoGrid').innerText = "";
+        displayAlbums();
+
       }
     );
   });
